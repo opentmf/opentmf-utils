@@ -1,0 +1,14 @@
+# Travis CI script
+
+language: c
+os: linux
+
+before_script:
+- git clone git://github.com/opentmf/libopentmf.git
+- cd libopentmf
+- ./autogen.sh && ./configure && make
+- sudo make install
+- sudo ldconfig
+- cd ..
+
+script: ./autogen.sh && ./configure && make
