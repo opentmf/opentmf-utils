@@ -35,6 +35,8 @@ static void print_help()
 {
   printf("Usage: lsopentmf [options]\n"
          "List OpenTMF drivers\n"
+         "  -d, --devices\n"
+         "    Show available devices per driver\n"
          "  -v, --verbose\n"
          "    Show more driver details, may be given multiple times\n"
          "  -h, --help\n"
@@ -69,6 +71,7 @@ static void print_multi_line(const char* label, const char* text)
 int main(int argc, char* argv[])
 {
   static const struct option options[] = {
+    { "devices" , no_argument , 0 , 'd' } ,
     { "verbose" , no_argument , 0 , 'v' } ,
     { "help"    , no_argument , 0 , 'h' } ,
     { "version" , no_argument , 0 , 'V' } ,
@@ -80,14 +83,19 @@ int main(int argc, char* argv[])
 
   // Parse options:
   int verbose = 0;
+  int show_devices = 0;
 
-  while((r = getopt_long(argc, argv, "hlv", options, 0)) != -1 )
+  while((r = getopt_long(argc, argv, "dvhV", options, 0)) != -1 )
   {
     switch(r)
     {
       case 'h':
         print_help();
         exit(EXIT_SUCCESS);
+
+      case 'd':
+        show_devices = 1;
+        break;
 
       case 'v':
         if(verbose < VERBOSE_MAX)
@@ -162,6 +170,57 @@ int main(int argc, char* argv[])
             break;
         }
 
+        if(show_devices)
+        {
+          char** device_list = NULL;
+
+          if((r = opentmf_drv_get_device_list(drv, &device_list)) == OPENTMF_SUCCESS)
+          {
+            struct opentmf_handle* dev;
+            char** device = device_list;
+            size_t url_base_len = strlen(url);
+
+            while(*device)
+            {
+              url[url_base_len] = '\0';
+              strcat(url, *device);
+
+              if((r = opentmf_open(ctx, url, &dev)) == OPENTMF_SUCCESS)
+              {
+                const struct opentmf_device_info* device_info = opentmf_dev_get_info(dev);
+
+                switch(verbose)
+                {
+                  case 0:
+                    printf("  %s\n", *device);
+                    break;
+
+                  case 1:
+                    printf("  %s\t%s\t%s\n", *device, device_info->name, device_info->serial);
+                    break;
+
+                  case 2:
+                    printf("  Path: %s\n", *device);
+                    printf("  Name: %s\n", device_info->name);
+                    printf("  Serial: %s\n", device_info->serial);
+                    printf("\n");
+                    break;
+                }
+
+                opentmf_close(dev);
+              }
+              else
+                fprintf(stderr, "Error opening device `%s`: %s (%d)\n", *device, opentmf_get_status_str(r), r);
+
+              device++;
+            }
+
+            if((r = opentmf_drv_free_device_list(drv, device_list)) != OPENTMF_SUCCESS)
+              fprintf(stderr, "Error freeing device list: %s (%d)\n", opentmf_get_status_str(r), r);
+          }
+          else
+            fprintf(stderr, "Error getting device list: %s (%d)\n", opentmf_get_status_str(r), r);
+        }
         opentmf_close(drv);
       }
       else
